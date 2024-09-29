@@ -1,51 +1,29 @@
-import time
+
 import os
 import json
 import platform
-from watchdog.observers import Observer
-from watchdog.events import PatternMatchingEventHandler
 
-# Detect the operating system
+# Detect the operating system (this might still be useful depending on where the file is stored)
 os_name = platform.system()
 
-# Set the directory to watch based on the OS
 if os_name == 'Darwin':  # macOS
     home_directory = os.path.expanduser("~")
-    watch_directory = os.path.join(home_directory, 'Library/Application Support/instructlab/datasets/')
 elif os_name == 'Linux':  # Linux
     home_directory = os.path.expanduser("~")
-    watch_directory = os.path.join(home_directory, '.local/share/instructlab/datasets/')
 else:
     raise OSError("Unsupported operating system: Only macOS and Linux are supported.")
 
-print(f"Watching directory: {watch_directory}")
-
-file_pattern = 'knowledge_train_msgs*'
-
-# Store file pointers to track the last read position for each file
-file_positions = {}
-
-# Define an event handler class
-class FileChangeHandler(PatternMatchingEventHandler):
-    def __init__(self):
-        super().__init__(patterns=[os.path.join(watch_directory, file_pattern)])
-
-    def process_new_lines(self, file_path):
-        # Open the file and seek to the last known position
+# Function to process a single file
+def process_file(file_path):
+    if not os.path.exists(file_path):
+        raise FileNotFoundError(f"The file {file_path} does not exist.")
+    
+    print(f"Processing file: {file_path}")
+    
+    try:
         with open(file_path, 'r') as file:
-            if file_path not in file_positions:
-                file_positions[file_path] = 0  # Initialize if we haven't seen this file before
-
-            # Move to the last read position
-            file.seek(file_positions[file_path])
-
-            # Read new lines
+            # Assuming the file contains JSON data
             new_lines = file.readlines()
-
-            # Update the file position
-            file_positions[file_path] = file.tell()
-
-            # Process each new line
             for line in new_lines:
                 try:
                     entry = json.loads(line)
@@ -71,29 +49,14 @@ class FileChangeHandler(PatternMatchingEventHandler):
                 except json.JSONDecodeError:
                     # Handle invalid JSON lines, which might happen in partially written lines
                     continue
+    except Exception as e:
+        print(f"An error occurred while processing the file: {e}")
 
-    def on_modified(self, event):
-        if not event.is_directory:
-            self.process_new_lines(event.src_path)
-
-    def on_created(self, event):
-        if not event.is_directory:
-            self.process_new_lines(event.src_path)
-
-# Set up the observer
-observer = Observer()
-event_handler = FileChangeHandler()
-observer.schedule(event_handler, path=watch_directory, recursive=False)
-
-# Start watching the directory
-observer.start()
-
-print("Observer started. Watching for changes...")
-
-try:
-    while True:
-        time.sleep(1)  # Keep the script running
-except KeyboardInterrupt:
-    observer.stop()
-
-observer.join()
+# Example usage
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) != 2:
+        print("Usage: python sdgparse.py <file_path>")
+    else:
+        input_file = sys.argv[1]
+        process_file(input_file)
